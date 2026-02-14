@@ -56,7 +56,7 @@ class CashFlowController(private val cashFlowService: ICashFlowService) {
         )
 
         val cashFlows = cashFlowService.getAllCashFlows(query)
-        call.respond(DataResponse("success", "Berhasil mengambil daftar cash-flow", mapOf("cashFlows" to cashFlows)))
+        call.respond(DataResponse("success", "Berhasil mengambil daftar catatan keuangan", mapOf("cashFlows" to cashFlows)))
     }
 
     suspend fun getCashFlowById(call: ApplicationCall) {
@@ -95,7 +95,7 @@ class CashFlowController(private val cashFlowService: ICashFlowService) {
 
         val response = DataResponse(
             "success",
-            "Berhasil menambahkan data",
+            "Berhasil menambahkan data catatan keuangan",
             CashFlowResponse(newId)
         )
         call.respond(response)
@@ -142,16 +142,16 @@ class CashFlowController(private val cashFlowService: ICashFlowService) {
 
     suspend fun getTypes(call: ApplicationCall) {
         val types = cashFlowService.getTypes()
-        call.respond(DataResponse("success", "Berhasil mengambil daftar tipe", mapOf("types" to types)))
+        call.respond(DataResponse("success", "Berhasil mengambil daftar tipe catatan keuangan", mapOf("types" to types)))
     }
 
     suspend fun getSources(call: ApplicationCall) {
         val sources = cashFlowService.getSources()
-        call.respond(DataResponse("success", "Berhasil mengambil daftar sumber", mapOf("sources" to sources)))
+        call.respond(DataResponse("success", "Berhasil mengambil daftar source catatan keuangan", mapOf("sources" to sources)))
     }
 
     suspend fun getLabels(call: ApplicationCall) {
         val labels = cashFlowService.getLabels()
-        call.respond(DataResponse("success", "Berhasil mengambil daftar label", mapOf("labels" to labels)))
+        call.respond(DataResponse("success", "Berhasil mengambil daftar label catatan keuangan", mapOf("labels" to labels)))
     }
 }
