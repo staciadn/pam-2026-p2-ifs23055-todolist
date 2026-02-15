@@ -73,25 +73,15 @@ class CashFlowController(private val service: ICashFlowService) {
     }
 
     suspend fun update(call: ApplicationCall) {
-        // 1. Ambil ID dari parameter
         val id = call.parameters["id"] ?: throw AppException(400, "ID tidak boleh kosong")
+        val req = try { call.receive<CashFlowRequest>() } catch (e: Exception) { throw AppException(400, "Format data tidak valid") }
 
-        // 2. Cek keberadaan data secara instan sebelum memproses JSON yang berat
-        if (service.getCashFlowById(id) == null) {
-            throw AppException(404, "Data catatan keuangan tidak tersedia!")
+        // Logic parsing sama seperti create
+        var amountDouble: Double? = null
+        if (req.amount != null) {
+            amountDouble = req.amount.toDouble()
         }
 
-        // 3. Terima request (Gunakan try-catch agar format JSON salah jadi 400, bukan 500)
-        val req = try {
-            call.receive<CashFlowRequest>()
-        } catch (e: Exception) {
-            throw AppException(400, "Format data tidak valid")
-        }
-
-        // 4. PAKSA 500: Konversi amount (Jika "abc", otomatis throw NumberFormatException -> ditangkap StatusPages 500)
-        val amountDouble = req.amount?.toDouble()
-
-        // 5. Validasi Field (Gunakan teknik Pipe '|' agar sesuai sistem 100)
         val validator = ValidatorHelper(mapOf(
             "type" to req.type, "source" to req.source, "label" to req.label,
             "description" to req.description, "amount" to req.amount
@@ -105,13 +95,13 @@ class CashFlowController(private val service: ICashFlowService) {
             validator.addError("amount", "Must be > 0")
         }
 
-        validator.validate() // Melempar AppException 400 jika ada error
+        validator.validate()
 
-        // 6. Eksekusi Update di Service
-        service.updateCashFlowRaw(id, req.type!!, req.source!!, req.label!!, amountDouble!!, req.description!!)
+        if (!service.updateCashFlowRaw(id, req.type!!, req.source!!, req.label!!, amountDouble!!, req.description!!)) {
+            throw AppException(404, "Data catatan keuangan tidak tersedia!")
+        }
 
-        // 7. Respon Sukses (PESAN HARUS SAMA PERSIS)
-        call.respond(DataResponse<Any?>("success", "Berhasil mengubah data catatan keuangan", null))
+        call.respond(DataResponse("success", "Berhasil mengubah data catatan keuangan", null))
     }
     suspend fun delete(call: ApplicationCall) {
         val id = call.parameters["id"] ?: throw AppException(400, "ID tidak boleh kosong")

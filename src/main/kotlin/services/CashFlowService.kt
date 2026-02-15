@@ -89,17 +89,10 @@ class CashFlowService(private val repository: ICashFlowRepository) : ICashFlowSe
 
     override fun updateCashFlowRaw(id: String, type: String, source: String, label: String, amount: Double, description: String): Boolean {
         val existing = repository.getById(id) ?: return false
-
-        // Copy data dengan data baru dan update timestamp
         val updated = existing.copy(
-            type = type,
-            source = source,
-            label = label,
-            amount = amount,
-            description = description,
-            updatedAt = java.time.OffsetDateTime.now().toString()
+            type = type, source = source, label = label, amount = amount, description = description,
+            updatedAt = OffsetDateTime.now().toString()
         )
-
         return repository.update(id, updated)
     }
 
