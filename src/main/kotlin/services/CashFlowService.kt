@@ -107,5 +107,9 @@ class CashFlowService(private val repository: ICashFlowRepository) : ICashFlowSe
 
     override fun getDistinctTypes() = repository.getAll().map { it.type }.distinct()
     override fun getDistinctSources() = repository.getAll().map { it.source }.distinct()
-    override fun getDistinctLabels() = repository.getAll().flatMap { it.label.split(",") }.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    override fun getDistinctLabels() = repository.getAll()
+        .flatMap { it.label.split(",") }
+        .map { it.trim() } // Menghilangkan spasi di depan/belakang
+        .filter { it.isNotEmpty() }
+        .distinct()
 }

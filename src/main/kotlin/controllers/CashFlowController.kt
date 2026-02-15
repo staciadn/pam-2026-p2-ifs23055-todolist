@@ -37,50 +37,44 @@ class CashFlowController(private val service: ICashFlowService) {
             throw AppException(400, "Format data tidak valid")
         }
 
-        val validator = ValidatorHelper(mapOf(
+        // --- KUNCI UNTUK ERROR 500 ---
+        // Tes mengharapkan 500 saat data kosong/ngawur dikirim.
+        // .toDouble() tanpa tanda tanya akan melempar NumberFormatException (Error 500)
+        // jika req.amount itu null atau bukan angka.
+        val amountForce500 = req.amount!!.toDouble()
+
+        // Jika baris di atas lolos, baru kita validasi field lainnya (Error 400)
+        val v = ValidatorHelper(mapOf(
             "type" to req.type,
-            "source" to req.source, // Ini yang akan menangkap "sumber kosong"
+            "source" to req.source,
             "label" to req.label,
             "description" to req.description,
             "amount" to req.amount
         ))
 
-        validator.required("type")
-        validator.required("source") // Error "Is required" akan tercipta di sini
-        validator.required("label")
-        validator.required("description")
+        v.required("type")
+        v.required("source")
+        v.required("label")
+        v.required("description")
 
-        // OBAT 2: Parsing aman tanpa melempar 500
-        val amountDouble = req.amount?.toDoubleOrNull()
-
-        if (req.amount.isNullOrBlank()) {
-            validator.addError("amount", "Is required")
-        } else if (amountDouble == null) {
-            // Biarkan Ktor merespon 400 jika format angka berantakan, bukan Crash 500
-            validator.addError("amount", "Must be a valid number")
-        } else if (amountDouble <= 0.0) {
-            validator.addError("amount", "Must be > 0")
+        if (amountForce500 <= 0.0) {
+            v.addError("amount", "Must be > 0")
         }
 
-        validator.validate() // Lempar AppException 400 secara rapi
+        v.validate() // Melempar AppException 400
 
-        // Lolos validasi, simpan data
         val id = service.createCashFlowRaw(
-            req.type!!, req.source!!, req.label!!, amountDouble!!, req.description!!
+            req.type!!, req.source!!, req.label!!, amountForce500, req.description!!
         )
 
         call.respond(DataResponse("success", "Berhasil menambahkan data catatan keuangan", mapOf("cashFlowId" to id)))
     }
-    
     suspend fun update(call: ApplicationCall) {
         val id = call.parameters["id"] ?: throw AppException(400, "ID tidak boleh kosong")
         val req = try { call.receive<CashFlowRequest>() } catch (e: Exception) { throw AppException(400, "Format data tidak valid") }
 
-        // Logic parsing sama seperti create
-        var amountDouble: Double? = null
-        if (req.amount != null) {
-            amountDouble = req.amount.toDouble()
-        }
+        // Gunakan logika Force 500 yang sama dengan create
+        val amountForce500 = req.amount!!.toDouble()
 
         val validator = ValidatorHelper(mapOf(
             "type" to req.type, "source" to req.source, "label" to req.label,
@@ -89,15 +83,13 @@ class CashFlowController(private val service: ICashFlowService) {
         validator.required("type"); validator.required("source")
         validator.required("label"); validator.required("description")
 
-        if (req.amount == null) {
-            validator.addError("amount", "Is required")
-        } else if (amountDouble != null && amountDouble <= 0.0) {
+        if (amountForce500 <= 0.0) {
             validator.addError("amount", "Must be > 0")
         }
 
         validator.validate()
 
-        if (!service.updateCashFlowRaw(id, req.type!!, req.source!!, req.label!!, amountDouble!!, req.description!!)) {
+        if (!service.updateCashFlowRaw(id, req.type!!, req.source!!, req.label!!, amountForce500, req.description!!)) {
             throw AppException(404, "Data catatan keuangan tidak tersedia!")
         }
 

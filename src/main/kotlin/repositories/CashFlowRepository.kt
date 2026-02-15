@@ -1,30 +1,28 @@
 package org.delcom.repositories
 
 import org.delcom.entities.CashFlow
+import java.util.Collections
 
 class CashFlowRepository : ICashFlowRepository {
-    private val cashFlows = mutableListOf<CashFlow>()
+    // Gunakan LinkedHashMap: Pencarian ID instan (O(1)), urutan tetap terjaga.
+    // Collections.synchronizedMap: Mencegah error saat ribuan tes jalan bersamaan.
+    private val cashFlows = Collections.synchronizedMap(LinkedHashMap<String, CashFlow>())
 
-    override fun getAll(): List<CashFlow> = cashFlows
+    override fun getAll(): List<CashFlow> = cashFlows.values.toList()
 
-    override fun getById(id: String): CashFlow? = cashFlows.find { it.id == id }
+    override fun getById(id: String): CashFlow? = cashFlows[id]
 
-    override fun add(cashFlow: CashFlow) {
-        cashFlows.add(cashFlow)
+    override fun add(cf: CashFlow) {
+        cashFlows[cf.id] = cf
     }
 
-    override fun update(id: String, cashFlow: CashFlow): Boolean {
-        val index = cashFlows.indexOfFirst { it.id == id }
-        if (index != -1) {
-            cashFlows[index] = cashFlow
-            return true
-        }
-        return false
+    override fun update(id: String, cf: CashFlow): Boolean {
+        if (!cashFlows.containsKey(id)) return false
+        cashFlows[id] = cf
+        return true
     }
 
-    override fun delete(id: String): Boolean {
-        return cashFlows.removeIf { it.id == id }
-    }
+    override fun delete(id: String): Boolean = cashFlows.remove(id) != null
 
     override fun clearAll() {
         cashFlows.clear()
