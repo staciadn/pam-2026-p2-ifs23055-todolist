@@ -14,28 +14,51 @@ class CashFlowService(private val repository: ICashFlowRepository) : ICashFlowSe
 
     // ... (getAllCashFlows tetap sama) ...
     override fun getAllCashFlows(query: CashFlowQuery): List<CashFlow> {
+        // OPTIMASI: Pindahkan formatter ke LUAR filter agar tidak dibuat ulang jutaan kali
+        val dateFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy")
+
+        // OPTIMASI: Parse tanggal query di LUAR filter (hanya 1x jalan)
+        val startLimit = query.startDate?.let { try { LocalDate.parse(it, dateFormatter) } catch (e: Exception) { null } }
+        val endLimit = query.endDate?.let { try { LocalDate.parse(it, dateFormatter) } catch (e: Exception) { null } }
+
+        // OPTIMASI: Pecah labels query di LUAR filter
+        val searchTags = query.labels?.split(",")?.map { it.trim().lowercase() }?.filter { it.isNotBlank() }
+
         return repository.getAll().filter { cf ->
-            val matchType = query.type?.let { cf.type.equals(it, true) } ?: true
-            val matchSource = query.source?.let { cf.source.equals(it, true) } ?: true
-            val matchGte = query.gteAmount?.let { cf.amount >= it } ?: true
-            val matchLte = query.lteAmount?.let { cf.amount <= it } ?: true
-            val matchSearch = query.search?.let { cf.description.contains(it, true) } ?: true
+            // Gunakan Short-circuit (&&) agar jika satu salah, yang bawah tidak diproses
 
-            val matchLabels = query.labels?.let { param ->
-                val searchTags = param.split(",").map { it.trim() }.filter { it.isNotBlank() }
-                if (searchTags.isEmpty()) true
-                else {
-                    val itemLabels = cf.label.split(",").map { it.trim() }
-                    searchTags.any { tag -> itemLabels.any { it.equals(tag, ignoreCase = true) } }
-                }
-            } ?: true
+            val matchType = query.type == null || cf.type.equals(query.type, true)
+            if (!matchType) return@filter false
 
-            val dateFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy")
-            val cfDate = try { LocalDate.parse(cf.createdAt.substring(0, 10)) } catch (e: Exception) { null }
-            val matchStart = query.startDate?.let { val start = LocalDate.parse(it, dateFormatter); cfDate?.let { d -> !d.isBefore(start) } ?: false } ?: true
-            val matchEnd = query.endDate?.let { val end = LocalDate.parse(it, dateFormatter); cfDate?.let { d -> !d.isAfter(end) } ?: false } ?: true
+            val matchSource = query.source == null || cf.source.equals(query.source, true)
+            if (!matchSource) return@filter false
 
-            matchType && matchSource && matchLabels && matchGte && matchLte && matchSearch && matchStart && matchEnd
+            val matchGte = query.gteAmount == null || cf.amount >= query.gteAmount
+            val matchLte = query.lteAmount == null || cf.amount <= query.lteAmount
+            if (!matchGte || !matchLte) return@filter false
+
+            val matchSearch = query.search == null || cf.description.contains(query.search, true)
+            if (!matchSearch) return@filter false
+
+            // Logika Label yang lebih ringan
+            if (searchTags != null && searchTags.isNotEmpty()) {
+                val itemLabels = cf.label.split(",").map { it.trim().lowercase() }
+                if (!searchTags.any { tag -> itemLabels.contains(tag) }) return@filter false
+            }
+
+            // Filter Tanggal (Penyebab utama timeout)
+            if (startLimit != null || endLimit != null) {
+                val cfDate = try {
+                    // substring(0,10) biasanya "YYYY-MM-DD"
+                    LocalDate.parse(cf.createdAt.substring(0, 10))
+                } catch (e: Exception) { null }
+
+                if (cfDate == null) return@filter false
+                if (startLimit != null && cfDate.isBefore(startLimit)) return@filter false
+                if (endLimit != null && cfDate.isAfter(endLimit)) return@filter false
+            }
+
+            true
         }
     }
 
