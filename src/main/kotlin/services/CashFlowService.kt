@@ -14,27 +14,60 @@ class CashFlowService(private val repository: ICashFlowRepository) : ICashFlowSe
 
     // ... (getAllCashFlows tetap sama) ...
     override fun getAllCashFlows(query: CashFlowQuery): List<CashFlow> {
+        // --- OPTIMASI 1: Pre-parsing di luar loop ---
         val dateFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy")
 
+        // Parse tanggal query cukup 1 kali saja
+        val startLimit = query.startDate?.let { try { LocalDate.parse(it, dateFormatter) } catch (e: Exception) { null } }
+        val endLimit = query.endDate?.let { try { LocalDate.parse(it, dateFormatter) } catch (e: Exception) { null } }
+
+        // Pecah label query cukup 1 kali saja
+        val searchTags = query.labels?.split(",")
+            ?.map { it.trim().lowercase() }
+            ?.filter { it.isNotBlank() } ?: emptyList()
+
+        val searchKeyword = query.search?.lowercase()
+
         return repository.getAll().filter { cf ->
-            // Logika ASLI Anda, hanya digabung dengan && agar jauh lebih cepat (short-circuit)
+            // --- OPTIMASI 2: Short-circuit Evaluation ---
+            // Gunakan return@filter langsung agar jika satu kriteria gagal,
+            // Kotlin tidak perlu mengecek kriteria di bawahnya.
 
-            (query.type == null || cf.type.equals(query.type, ignoreCase = true)) &&
-                    (query.source == null || cf.source.equals(query.source, ignoreCase = true)) &&
-                    (query.gteAmount == null || cf.amount >= query.gteAmount) &&
-                    (query.lteAmount == null || cf.amount <= query.lteAmount) &&
-                    (query.search == null || cf.description.contains(query.search, ignoreCase = true)) &&
+            // 1. Filter Tipe
+            if (query.type != null && !cf.type.equals(query.type, true)) return@filter false
 
-                    // Filter Labels ASLI Anda
-                    (query.labels == null || query.labels.split(",").map { it.trim() }.filter { it.isNotBlank() }.let { searchTags ->
-                        searchTags.isEmpty() || searchTags.any { tag ->
-                            cf.label.split(",").map { it.trim() }.any { it.equals(tag, ignoreCase = true) }
-                        }
-                    }) &&
+            // 2. Filter Source
+            if (query.source != null && !cf.source.equals(query.source, true)) return@filter false
 
-                    // Filter Tanggal ASLI Anda (Dibungkus try-catch sebaris agar aman dari format salah)
-                    (query.startDate == null || try { !LocalDate.parse(cf.createdAt.substring(0, 10)).isBefore(LocalDate.parse(query.startDate, dateFormatter)) } catch (e: Exception) { false }) &&
-                    (query.endDate == null || try { !LocalDate.parse(cf.createdAt.substring(0, 10)).isAfter(LocalDate.parse(query.endDate, dateFormatter)) } catch (e: Exception) { false })
+            // 3. Filter Amount
+            if (query.gteAmount != null && cf.amount < query.gteAmount) return@filter false
+            if (query.lteAmount != null && cf.amount > query.lteAmount) return@filter false
+
+            // 4. Filter Search (Deskripsi)
+            if (searchKeyword != null && !cf.description.lowercase().contains(searchKeyword)) return@filter false
+
+            // 5. Filter Labels
+            if (searchTags.isNotEmpty()) {
+                val itemLabels = cf.label.split(",").map { it.trim().lowercase() }
+                if (!searchTags.any { tag -> itemLabels.contains(tag) }) return@filter false
+            }
+
+            // 6. Filter Tanggal (Optimasi Parsing Tanggal Record)
+            if (startLimit != null || endLimit != null) {
+                val cfDate = try {
+                    // substring(0,10) biasanya "YYYY-MM-DD", gunakan ISO_LOCAL_DATE yang jauh lebih cepat
+                    LocalDate.parse(cf.createdAt.substring(0, 10))
+                } catch (e: Exception) { null }
+
+                if (cfDate != null) {
+                    if (startLimit != null && cfDate.isBefore(startLimit)) return@filter false
+                    if (endLimit != null && cfDate.isAfter(endLimit)) return@filter false
+                } else if (startLimit != null || endLimit != null) {
+                    return@filter false // Jika filter tanggal aktif tapi data tidak punya tanggal valid
+                }
+            }
+
+            true // Lolos semua filter
         }
     }
 
