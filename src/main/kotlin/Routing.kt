@@ -36,7 +36,7 @@ fun Application.configureRouting() {
     }
 
     routing {
-        get("/") { call.respondText("11S23033 - Josua Asido Prima Silalahi") }
+        get("/") { call.respondText("11S23001") }
 
         route("/cash-flows") {
             post("/setup") { controller.setupData(call) }
