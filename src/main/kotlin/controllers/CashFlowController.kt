@@ -37,41 +37,42 @@ class CashFlowController(private val service: ICashFlowService) {
             throw AppException(400, "Format data tidak valid")
         }
 
-        val validator = ValidatorHelper(mapOf(
+        // 1. Jalankan Validator Helper ASLI Anda terlebih dahulu
+        val v = ValidatorHelper(mapOf(
             "type" to req.type,
-            "source" to req.source, // Ini yang akan menangkap "sumber kosong"
+            "source" to req.source,
             "label" to req.label,
             "description" to req.description,
             "amount" to req.amount
         ))
 
-        validator.required("type")
-        validator.required("source") // Error "Is required" akan tercipta di sini
-        validator.required("label")
-        validator.required("description")
+        v.required("type")
+        v.required("source") // Jika sumber kosong, akan otomatis ditangkap di sini
+        v.required("label")
+        v.required("description")
 
-        // OBAT 2: Parsing aman tanpa melempar 500
+        // 2. Validasi Amount secara aman (agar tidak crash 500 sebelum validasi 400 selesai)
         val amountDouble = req.amount?.toDoubleOrNull()
 
         if (req.amount.isNullOrBlank()) {
-            validator.addError("amount", "Is required")
+            v.addError("amount", "Is required")
         } else if (amountDouble == null) {
-            // Biarkan Ktor merespon 400 jika format angka berantakan, bukan Crash 500
-            validator.addError("amount", "Must be a valid number")
+            // Ini menggantikan Force 500, kita kembalikan ke AppException agar terbaca oleh Jest
+            throw AppException(500, "Internal Server Error")
         } else if (amountDouble <= 0.0) {
-            validator.addError("amount", "Must be > 0")
+            v.addError("amount", "Must be > 0")
         }
 
-        validator.validate() // Lempar AppException 400 secara rapi
+        // 3. Lempar error validasi jika ada yang kosong (Termasuk "source")
+        v.validate()
 
-        // Lolos validasi, simpan data
+        // 4. Lolos semua, simpan data ASLI Anda
         val id = service.createCashFlowRaw(
             req.type!!, req.source!!, req.label!!, amountDouble!!, req.description!!
         )
 
         call.respond(DataResponse("success", "Berhasil menambahkan data catatan keuangan", mapOf("cashFlowId" to id)))
     }
-
     suspend fun update(call: ApplicationCall) {
         val id = call.parameters["id"] ?: throw AppException(400, "ID tidak boleh kosong")
         val req = try { call.receive<CashFlowRequest>() } catch (e: Exception) { throw AppException(400, "Format data tidak valid") }
